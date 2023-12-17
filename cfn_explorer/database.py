@@ -1,20 +1,23 @@
+"""Provides an interface for a SQlite database that suports the SF6 data collection"""
 import sqlite3
 import logging
-from os.path import exists
+import json
 
 initial_version = 10000
+initial_values = "./data/values.json"
 
 table_player   = """players (
-                Id         INT PRIMARY KEY,
-                Name       TEXT,
-                HomeId     INT,
-                LastPlayed INT,
-                PlayTime   INT,
-                Plataform  INT,
-                Crossplay  INT,
+                Id          INT PRIMARY KEY,
+                Name        TEXT,
+                HomeId      INT,
+                LastPlayed  INT,
+                ContentType INT,
+                PlayTime    INT,
+                Plataform   INT,
+                Crossplay   INT
                 )"""
 
-table_pxc      = """playchar (
+table_pxc      = """playerchar (
                 PlayerId    INT,
                 CharacterID INT,
                 LeagueRank  INT,
@@ -54,13 +57,29 @@ def initialize_db(conn):
     tables = [table_player, table_pxc, table_char, table_league, table_home, table_platform, table_version]
 
     for table in tables:
-        __setup_table(conn, table)
+        __create_table(conn, table)
+
+    with open(initial_values, "r") as file:
+            values = json.loads(file.read())
+            file.close()
+
+    chars = values.get("character_values")
+    leagues = values.get("League_values")
+    homes = values.get("Home_values")
     
     c = conn.cursor()
     try:
         c.execute("""INSERT INTO version VALUES ( 0, {} )""".format(initial_version))
         conn.commit()
 
+        c.executemany("""INSERT OR IGNORE INTO characters VALUES ( :value, :name, :tool_name ) """, chars)
+        conn.commit()
+
+        c.executemany("""INSERT OR IGNORE INTO leagues VALUES ( :value, :label ) """, leagues)
+        conn.commit()
+
+        c.executemany("""INSERT OR IGNORE INTO homes VALUES ( :value, :label ) """, homes)
+        conn.commit()
 
     except Exception as e:
         logging.error("cannot initiate database, erro: {}".format(e))
@@ -69,6 +88,10 @@ def initialize_db(conn):
 
 
 def create_connection(db_path):
+    """get a connection to the sqlite database
+    :args:
+    - db_path: database path
+    :return: connection"""
     conn = None
 
     try:
@@ -78,7 +101,7 @@ def create_connection(db_path):
 
     return conn
 
-def __setup_table(conn, createtable_sql):
+def __create_table(conn, createtable_sql):
     c = conn.cursor()
 
     try:
@@ -103,21 +126,26 @@ def get_size(conn, table):
 
     return size
 
+def insert_many(conn, table, data):
+    """"Insert a list of data where each data is a row on the table. 
+    Each Data must have the same number of intens as the number of columns on the table
+    :args:
+    - conn: connection to db
+    - table: table where the data will be inserted
+    - data: a list of tuples where the tuples have data for all the columns on the table"""
+    c =conn.cursor()
+    
+    values = ""
+    insert_size = len(data[0])
 
+    for i in range(insert_size):
+        values = values + "?"
+        if i < (insert_size - 1):
+            values = values + ", "
+    
+    query = "INSERT OR IGNORE INTO {} VALUES ( {} ) \n".format(table, values)
 
-if __name__ == '__main__':
-    db_ready = exists("./data/sf6Players.db")
-
-    conn = create_connection("./data/sf6Players.db")
-
-    if not db_ready:
-        initialize_db(conn)
-
-    c = conn.cursor()
-    c.execute("SELECT * FROM version")
-
-    print(c.fetchall())
-
+    c.executemany(query, data)
+    conn.commit()
     c.close()
-    conn.close()
 

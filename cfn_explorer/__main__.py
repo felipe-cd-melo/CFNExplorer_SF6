@@ -6,6 +6,7 @@ import json
 import logging
 from os.path import exists
 from jproperties import Properties
+from datetime import datetime
 
 token_home = "./data/token.txt"
 db_home = "./data/sf6Players.db"
@@ -30,6 +31,8 @@ def main():
 
     max_pages = data.get("total_page")
     players_data = data.get("ranking_fighter_list")
+
+    insert_players(players_data)
 
 
     
@@ -60,6 +63,45 @@ def get_token():
             file.close()
     
     return new_token
+
+def insert_players(players_data):
+    """Organize and save the players and their characters on the db
+    :args:
+    - players_data: a list of ranking_fhighters objects"""
+    players = []
+    characters = []
+
+    for player_data in players_data:
+        p_id         = player_data.get("fighter_banner_info").get("personal_info").get("short_id")
+        p_name       = player_data.get("fighter_banner_info").get("personal_info").get("fighter_id")
+        p_platform   = player_data.get("fighter_banner_info").get("personal_info").get("platform_id")
+        p_home       = player_data.get("fighter_banner_info").get("home_id")
+        p_crossplay  = player_data.get("fighter_banner_info").get("allow_cross_play")
+        p_favcontent = player_data.get("fighter_banner_info").get("max_content_play_time").get("content_type")
+        p_playtime   = player_data.get("fighter_banner_info").get("max_content_play_time").get("play_time")
+        p_lastplayed = player_data.get("fighter_banner_info").get("last_play_at")
+
+        p = (p_id, p_name, p_platform, p_home, p_crossplay, p_favcontent, p_playtime, p_lastplayed)
+        
+        pc_id     = player_data.get("character_id")
+        pc_league = player_data.get("league_rank")
+        pc_lp     = player_data.get("league_point")
+        pc_mr     = player_data.get("master_rating")
+
+        c = (p_id, pc_id, pc_league, pc_lp, pc_mr)
+
+        players.append(p)
+        characters.append(c)
+
+    conn = database.create_connection(db_home)
+
+    database.insert_many(conn, "players", players)
+    database.insert_many(conn, "playerchar", characters)
+
+    conn.close()
+
+
+
     
 if __name__ == '__main__':
     main()
