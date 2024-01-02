@@ -6,14 +6,14 @@ from selenium.common import NoSuchElementException, ElementNotInteractableExcept
 
 class Logger:
 
-    url = "https://www.streetfighter.com/6/buckler/auth/loginep?redirect_url=/"
+    URL = "https://www.streetfighter.com/6/buckler/auth/loginep?redirect_url=/"
 
     dropdown_country = "US"
     dropdown_Day     = "1"
     dropdown_Year    = "2000"
     dropdown_Month   = "1"
 
-    def __init__(self, email, password):
+    def __init__(self, email: str, password: str):
         self.email    = email
         self.password = password
         self.driver   = webdriver.Chrome()
@@ -23,7 +23,7 @@ class Logger:
 
         :return: a token value
         """
-        self.driver.get(self.url)
+        self.driver.get(self.URL)
 
         exempt_wait_erros = [NoSuchElementException, ElementNotInteractableException, StaleElementReferenceException]
         wait = WebDriverWait(self.driver, 10, ignored_exceptions=exempt_wait_erros)
@@ -51,8 +51,7 @@ class Logger:
 
         return self.driver.get_cookie("buckler_id").get("value")
         
-    
-    def __dropdown_fill(self, element, value):
+    def __dropdown_fill(self, element:str, value:str):
         """fill a dropdown element
 
         :Args:

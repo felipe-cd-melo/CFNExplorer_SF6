@@ -1,12 +1,16 @@
 """Provides an interface for a SQlite database that suports the SF6 data collection"""
 import sqlite3
+from sqlite3 import Connection
+from aiosqlite import Connection as aioConnection
 import logging
 import json
 
-initial_version = 10000
-initial_values = "./data/values.json"
+VERSION = 10001
 
-table_player   = """players (
+INITIAL_VALUES = "./data/values.json"
+
+#data base tables
+TABLE_PLAYERS   = """players (
                 Id          INT PRIMARY KEY,
                 Name        TEXT,
                 HomeId      INT,
@@ -17,49 +21,50 @@ table_player   = """players (
                 Crossplay   INT
                 )"""
 
-table_pxc      = """playerchar (
+TABLE_PXC       = """playerchar (
                 PlayerId    INT,
                 CharacterID INT,
+                InputType   INT,
                 LeagueRank  INT,
                 LP          INT,
                 MR          INT,
                 CONSTRAINT PK_PlayChar PRIMARY KEY (PlayerId, CharacterID)
                 )""" 
 
-table_char     = """characters (
+TABLE_CHARS     = """characters (
                 Id   INT PRIMARY KEY,
                 Name TEXT,
                 ToolName TEXT
                 )"""
 
-table_league   = """leagues(
+TABLE_LEAGUES   = """leagues(
                 Id   INT PRIMARY KEY,
                 Name TEXT
                 )"""
 
-table_home     = """homes(
+TABLE_HOMES     = """homes(
                 Id   INT PRIMARY KEY,
                 Name TEXT
                 )"""
 
-table_platform = """platforms(
+TABLE_PLATFORMS = """platforms(
                 Id   INT PRIMARY KEY,
                 Name TEXT
                 )"""
 
-table_version  = """version(
+TABLE_VERSION  = """version(
                 K0 INT,
                 DBVer INT
                 )"""
 
 
-def initialize_db(conn):
-    tables = [table_player, table_pxc, table_char, table_league, table_home, table_platform, table_version]
+def initialize_db(conn: Connection):
+    tables = [TABLE_PLAYERS, TABLE_PXC, TABLE_CHARS, TABLE_LEAGUES, TABLE_HOMES, TABLE_PLATFORMS, TABLE_VERSION]
 
     for table in tables:
         __create_table(conn, table)
 
-    with open(initial_values, "r") as file:
+    with open(INITIAL_VALUES, "r") as file:
             values = json.loads(file.read())
             file.close()
 
@@ -69,7 +74,7 @@ def initialize_db(conn):
     
     c = conn.cursor()
     try:
-        c.execute("""INSERT INTO version VALUES ( 0, {} )""".format(initial_version))
+        c.execute("""INSERT INTO version VALUES ( 0, {} )""".format(VERSION))
         conn.commit()
 
         c.executemany("""INSERT OR IGNORE INTO characters VALUES ( :value, :name, :tool_name ) """, chars)
@@ -86,9 +91,9 @@ def initialize_db(conn):
     finally:
         c.close()
 
-
-def create_connection(db_path):
+def create_connection(db_path: str) -> Connection:
     """get a connection to the sqlite database
+
     :args:
     - db_path: database path
     :return: connection"""
@@ -101,7 +106,7 @@ def create_connection(db_path):
 
     return conn
 
-def __create_table(conn, createtable_sql):
+def __create_table(conn: Connection, createtable_sql: str):
     c = conn.cursor()
 
     try:
@@ -113,12 +118,12 @@ def __create_table(conn, createtable_sql):
     finally:
         c.close()
 
-def get_size(conn, table):
+def get_size(conn: Connection, table: str):
     c = conn.cursor()
 
     try:
         c.execute("SELECT COUNT(*) FROM {}".format(table))
-        size = c.fetchone()[0]
+        size: int = c.fetchone()[0]
     except Exception as e:
         logging.error("Could not get table size, error: {}".format(e))
     finally:
@@ -126,15 +131,36 @@ def get_size(conn, table):
 
     return size
 
-def insert_many(conn, table, data):
+def insert_many(conn: Connection, table: str, data: list):
     """"Insert a list of data where each data is a row on the table. 
     Each Data must have the same number of intens as the number of columns on the table
+
     :args:
     - conn: connection to db
     - table: table where the data will be inserted
     - data: a list of tuples where the tuples have data for all the columns on the table"""
-    c =conn.cursor()
-    
+    c = conn.cursor()
+
+    query = __insert_many_query(table, data)
+
+    c.executemany(query, data)
+    c.close()
+
+async def aio_insert_many(conn: aioConnection, table: str, data: list):
+    """"asynchronously Insert a list of data where each data is a row on the table. 
+    Each Data must have the same number of intens as the number of columns on the table
+
+    :args:
+    - conn: iosqlite connection to db
+    - table: table where the data will be inserted
+    - data: list of tuples where the tuples have data for all the columns on the table"""
+    query = __insert_many_query(table, data)
+    try:
+        await conn.executemany(query, data)
+    except Exception as e:
+        logging.warn(f"aio_insert_many:({query}\n{*data,})\n{e}")
+
+def __insert_many_query(table: str, data: list):
     values = ""
     insert_size = len(data[0])
 
@@ -143,9 +169,18 @@ def insert_many(conn, table, data):
         if i < (insert_size - 1):
             values = values + ", "
     
-    query = "INSERT OR IGNORE INTO {} VALUES ( {} ) \n".format(table, values)
+    query = "INSERT OR IGNORE INTO {} VALUES ( {} )".format(table, values)
+    return query
 
-    c.executemany(query, data)
-    conn.commit()
-    c.close()
+def get_tabe_data(conn: Connection, table: str):
+    c = conn.cursor()
 
+    try:
+        c.execute("SELECT * FROM {}".format(table))
+        data = c.fetchall()
+    except Exception as e:
+        logging.error("Could not get table data, error: {}".format(e))
+    finally:
+        c.close()
+
+    return data

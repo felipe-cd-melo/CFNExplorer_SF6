@@ -16,6 +16,7 @@ class player:
 class playerchar:
     player: int
     char: int
+    control: int
     league_rank: int
     lp: int
     mr: int
